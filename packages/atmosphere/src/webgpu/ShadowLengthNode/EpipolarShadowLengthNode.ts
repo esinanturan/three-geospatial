@@ -466,11 +466,15 @@ export class EpipolarShadowLengthNode extends Node {
             distanceMarchedInCascade.addAssign(rayStepLengthUnit.mul(stepScale))
 
             // Store the distance where the ray first enters the shadow.
-            distanceToFirstShadowedSection.assign(
+            If(
               distanceToFirstShadowedSection
                 .lessThan(0)
-                .and(isInLight.not())
-                .select(totalMarchedLength, distanceToFirstShadowedSection)
+                .and(isInLight.lessThan(1)),
+              () => {
+                distanceToFirstShadowedSection.assign(
+                  totalMarchedLength.add(integrationStep.mul(isInLight))
+                )
+              }
             )
 
             totalShadowLength.addAssign(
