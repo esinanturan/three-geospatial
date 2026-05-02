@@ -26,8 +26,6 @@ uniform sampler3D higher_order_scattering_texture;
 #include "bruneton/common"
 #include "bruneton/runtime"
 
-#include "sky"
-
 uniform sampler2D normalBuffer;
 
 uniform mat4 projectionMatrix;
@@ -38,10 +36,13 @@ uniform float bottomRadius;
 uniform mat4 worldToECEFMatrix;
 uniform float geometricErrorCorrectionAmount;
 uniform vec3 sunDirection;
+uniform float cosSunAngularRadius;
 uniform vec3 moonDirection;
 uniform float moonAngularRadius;
 uniform float lunarRadianceScale;
 uniform float albedoScale;
+
+#include "sky"
 
 #ifdef HAS_LIGHTING_MASK
 uniform sampler2D lightingMaskBuffer;

@@ -20,13 +20,14 @@ uniform sampler3D higher_order_scattering_texture;
 #include "bruneton/common"
 #include "bruneton/runtime"
 
-#include "sky"
-
 uniform vec3 sunDirection;
+uniform float cosSunAngularRadius;
 uniform vec3 moonDirection;
 uniform float moonAngularRadius;
 uniform float lunarRadianceScale;
 uniform vec3 groundAlbedo;
+
+#include "sky"
 
 #ifdef HAS_SHADOW_LENGTH
 uniform sampler2D shadowLengthBuffer;

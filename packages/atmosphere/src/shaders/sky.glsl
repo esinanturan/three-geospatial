@@ -47,7 +47,7 @@ vec3 getSkyRadiance(
 
   #ifdef SUN
   float viewDotSun = dot(rayDirection, sunDirection);
-  if (viewDotSun > cos(ATMOSPHERE.sun_angular_radius)) {
+  if (viewDotSun > cosSunAngularRadius) {
     float angle = acos(clamp(viewDotSun, -1.0, 1.0));
     float antialias = smoothstep(
       ATMOSPHERE.sun_angular_radius,
