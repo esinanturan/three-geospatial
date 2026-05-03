@@ -340,8 +340,8 @@ const getIndirectRadiance = /*#__PURE__*/ FnVar(
       if (context.accurateShadowScattering) {
         // TODO: Technically, we could use the scatteringBranch2 when the shadow
         // starts from the camera to reduce the number of LUT lookups, but it
-        // produces discontinuity seemingly due to emphasized transmittance
-        // between a short distance.
+        // produces discontinuity seemingly due to the inconsistency with the
+        // scattering clamped by the minCosLight and transmittance without it.
         // scatteringConditional
         //   .ElseIf(shadowLength.y.equal(0), scatteringBranch2)
         //   .Else(scatteringBranch3)

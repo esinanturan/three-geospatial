@@ -406,8 +406,7 @@ export const computeScatteringTexture = /*#__PURE__*/ FnVar(
 
         // In case higherOrderScatteringTexture is disabled, integrate the
         // single Rayleigh scattering and multiple scattering over the Rayleigh
-        // phase (irradiance), in the way it matches to the Bruneton's 4D
-        // scattering LUT.
+        // phase, in the way it matches to the Bruneton's 4D scattering LUT.
         let scattering: Node<'vec3'> =
           transmittanceToSun.mul(rayleighScattering)
         if (!context.parameters.higherOrderScatteringTexture) {
@@ -420,7 +419,7 @@ export const computeScatteringTexture = /*#__PURE__*/ FnVar(
           .toConst()
         totalScattering.addAssign(totalTransmittance.mul(scatteringIntegrand))
 
-        // Integrate the Mie scattering over the Mie phase (irradiance).
+        // Integrate the Mie scattering over the Mie phase.
         const mie = solarIrradiance
           .mul(transmittanceToSun.mul(mieScattering))
           .toConst()
@@ -430,7 +429,7 @@ export const computeScatteringTexture = /*#__PURE__*/ FnVar(
           .toConst()
         totalMie.addAssign(totalTransmittance.mul(mieIntegrand))
 
-        // Integrate the higher-order scattering radiance.
+        // Integrate the higher-order scattering.
         const higherOrder = solarIrradiance.mul(multipleScattering)
         const higherOrderIntegrand = higherOrder
           .sub(higherOrder.mul(transmittance))
