@@ -1,10 +1,10 @@
-import type { Camera } from 'three'
 import { hash } from 'three/src/nodes/core/NodeUtils.js'
 import {
   Fn,
   mix,
   nodeProxy,
   positionGeometry,
+  screenUV,
   uv,
   vec2,
   vec3,
@@ -25,27 +25,18 @@ import { getIndirectLuminance } from './runtime'
 import { StarsNode } from './StarsNode'
 import { SunNode } from './SunNode'
 
-const cameraDirectionWorld = (camera?: Camera | null): Node<'vec3'> => {
-  const positionView = inverseProjectionMatrix(camera).mul(
-    vec4(positionGeometry, 1)
-  ).xyz
-  const directionWorld = inverseViewMatrix(camera).mul(
-    vec4(positionView, 0)
-  ).xyz
-  return directionWorld
-}
-
-const CAMERA = 'CAMERA'
+const QUAD = 'QUAD'
 const EQUIRECTANGULAR = 'EQUIRECTANGULAR'
+const SCREEN = 'SCREEN'
 
-type SkyNodeScope = typeof CAMERA | typeof EQUIRECTANGULAR
+type SkyNodeScope = typeof QUAD | typeof EQUIRECTANGULAR | typeof SCREEN
 
 export class SkyNode extends TempNode {
   static override get type(): string {
     return 'SkyNode'
   }
 
-  private readonly scope: SkyNodeScope = CAMERA
+  private readonly scope: SkyNodeScope = QUAD
 
   shadowLengthNode?: Node<'vec2'> | null
 
@@ -89,29 +80,44 @@ export class SkyNode extends TempNode {
       altitudeCorrectionUnit
     } = atmosphereContext
 
-    // Direction of the camera ray:
-    let directionWorld
-    switch (this.scope) {
-      case CAMERA: {
-        directionWorld = cameraDirectionWorld(
-          this.useContextCamera ? atmosphereContext.camera : null
-        )
-        break
+    const getRayDirectionECEF = Fn((): Node<'vec3'> => {
+      let directionWorld
+      let vertexStage = false
+      const camera = this.useContextCamera ? atmosphereContext.camera : null
+      switch (this.scope) {
+        case QUAD: {
+          const positionView = inverseProjectionMatrix(camera).mul(
+            vec4(positionGeometry, 1)
+          ).xyz
+          directionWorld = inverseViewMatrix(camera).mul(
+            vec4(positionView, 0)
+          ).xyz // Normalize later
+          vertexStage = true
+          break
+        }
+        case EQUIRECTANGULAR: {
+          directionWorld = equirectToDirectionWorld(uv())
+          vertexStage = true
+          break
+        }
+        case SCREEN: {
+          // positionWorld.sub(cameraPositionWorld(camera)) could produce the
+          // same result, but it suffers from precision issues when it's located
+          // far from the world origin.
+          const positionView = inverseProjectionMatrix(camera).mul(
+            vec4(screenUV.flipY().mul(2).sub(1), 1, 1)
+          ).xyz
+          directionWorld = inverseViewMatrix(camera).mul(
+            vec4(positionView, 0)
+          ).xyz // Normalize later
+        }
       }
-      case EQUIRECTANGULAR:
-        directionWorld = equirectToDirectionWorld(uv())
-        break
-    }
-    if (directionWorld == null) {
-      return
-    }
+      const result = matrixWorldToECEF.mul(vec4(directionWorld, 0)).xyz
+      return (vertexStage ? result.toVertexStage() : result).normalize()
+    })
 
     return Fn(() => {
-      const rayDirectionECEF = matrixWorldToECEF
-        .mul(vec4(directionWorld, 0))
-        .xyz.toVertexStage()
-        .normalize()
-        .toConst()
+      const rayDirectionECEF = getRayDirectionECEF().toConst()
 
       const solarLuminanceTransfer = getIndirectLuminance(
         cameraPositionUnit.add(altitudeCorrectionUnit),
@@ -159,5 +165,6 @@ export class SkyNode extends TempNode {
   }
 }
 
-export const sky = /*#__PURE__*/ nodeProxy(SkyNode, CAMERA)
+export const sky = /*#__PURE__*/ nodeProxy(SkyNode, QUAD)
 export const skyBackground = /*#__PURE__*/ nodeProxy(SkyNode, EQUIRECTANGULAR)
+export const skyBackdrop = /*#__PURE__*/ nodeProxy(SkyNode, SCREEN)
