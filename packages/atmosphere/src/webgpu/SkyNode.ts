@@ -4,7 +4,7 @@ import {
   mix,
   nodeProxy,
   positionGeometry,
-  screenUV,
+  positionView,
   uv,
   vec2,
   vec3,
@@ -15,7 +15,6 @@ import { TempNode, type NodeBuilder } from 'three/webgpu'
 import {
   equirectToDirectionWorld,
   inverseProjectionMatrix,
-  inverseViewMatrix,
   type Node
 } from '@takram/three-geospatial/webgpu'
 
@@ -25,24 +24,26 @@ import { getIndirectLuminance } from './runtime'
 import { StarsNode } from './StarsNode'
 import { SunNode } from './SunNode'
 
-const QUAD = 'QUAD'
+const CAMERA = 'CAMERA'
 const EQUIRECTANGULAR = 'EQUIRECTANGULAR'
-const SCREEN = 'SCREEN'
+const BACKDROP = 'BACKDROP'
 
-type SkyNodeScope = typeof QUAD | typeof EQUIRECTANGULAR | typeof SCREEN
+type SkyNodeScope = typeof CAMERA | typeof EQUIRECTANGULAR | typeof BACKDROP
 
 export class SkyNode extends TempNode {
   static override get type(): string {
     return 'SkyNode'
   }
 
-  private readonly scope: SkyNodeScope = QUAD
+  private readonly scope: SkyNodeScope
 
   shadowLengthNode?: Node<'vec2'> | null
 
   sunNode: SunNode
   moonNode: MoonNode
   starsNode: StarsNode
+  cameraPositionUnit?: Node<'vec3'> | null
+  rayDirectionECEF?: Node<'vec3'> | null
 
   showSun = true
   showMoon = true
@@ -72,57 +73,66 @@ export class SkyNode extends TempNode {
   override setup(builder: NodeBuilder): unknown {
     const atmosphereContext = getAtmosphereContext(builder)
 
+    const { worldToUnit } = atmosphereContext.parameters
     const {
       matrixWorldToECEF,
+      matrixViewToECEF,
       sunDirectionECEF,
       moonDirectionECEF,
       cameraPositionUnit,
       altitudeCorrectionUnit
     } = atmosphereContext
 
+    const { shadowLengthNode } = this
+
+    const getCameraPositionUnit = (): Node<'vec3'> => {
+      if (this.scope === BACKDROP) {
+        // Move the camera onto the backdrop surface:
+        return matrixViewToECEF
+          .mul(vec4(positionView, 1))
+          .xyz.mul(worldToUnit)
+          .toVarying('cameraPositionUnit')
+      }
+      return cameraPositionUnit
+    }
+
     const getRayDirectionECEF = Fn((): Node<'vec3'> => {
-      let directionWorld
-      let vertexStage = false
-      const camera = this.useContextCamera ? atmosphereContext.camera : null
       switch (this.scope) {
-        case QUAD: {
+        case CAMERA: {
+          const camera = this.useContextCamera ? atmosphereContext.camera : null
           const positionView = inverseProjectionMatrix(camera).mul(
             vec4(positionGeometry, 1)
           ).xyz
-          directionWorld = inverseViewMatrix(camera).mul(
-            vec4(positionView, 0)
-          ).xyz // Normalize later
-          vertexStage = true
-          break
+          return matrixViewToECEF
+            .mul(vec4(positionView, 0))
+            .xyz.toVarying('rayDirectionECEF')
+            .normalize()
         }
         case EQUIRECTANGULAR: {
-          directionWorld = equirectToDirectionWorld(uv())
-          vertexStage = true
-          break
+          const directionWorld = equirectToDirectionWorld(uv())
+          return matrixWorldToECEF
+            .mul(vec4(directionWorld, 0))
+            .xyz.toVarying('rayDirectionECEF')
+            .normalize()
         }
-        case SCREEN: {
-          // positionWorld.sub(cameraPositionWorld(camera)) could produce the
-          // same result, but it suffers from precision issues when it's located
-          // far from the world origin.
-          const positionView = inverseProjectionMatrix(camera).mul(
-            vec4(screenUV.flipY().mul(2).sub(1), 1, 1)
-          ).xyz
-          directionWorld = inverseViewMatrix(camera).mul(
-            vec4(positionView, 0)
-          ).xyz // Normalize later
+        case BACKDROP: {
+          return matrixViewToECEF
+            .mul(vec4(positionView, 0))
+            .xyz.toVarying('rayDirectionECEF')
+            .normalize()
         }
       }
-      const result = matrixWorldToECEF.mul(vec4(directionWorld, 0)).xyz
-      return (vertexStage ? result.toVertexStage() : result).normalize()
     })
 
     return Fn(() => {
-      const rayDirectionECEF = getRayDirectionECEF().toConst()
+      let { cameraPositionUnit, rayDirectionECEF } = this
+      cameraPositionUnit ??= getCameraPositionUnit().toConst()
+      rayDirectionECEF ??= getRayDirectionECEF().toConst()
 
       const solarLuminanceTransfer = getIndirectLuminance(
         cameraPositionUnit.add(altitudeCorrectionUnit),
         rayDirectionECEF,
-        this.shadowLengthNode ?? vec2(0),
+        shadowLengthNode ?? vec2(0),
         sunDirectionECEF
       ).toConst()
       const transmittance = solarLuminanceTransfer.get('transmittance')
@@ -132,9 +142,9 @@ export class SkyNode extends TempNode {
         const lunarLuminanceTransfer = getIndirectLuminance(
           cameraPositionUnit.add(altitudeCorrectionUnit),
           rayDirectionECEF,
-          this.shadowLengthNode ?? vec2(0),
+          shadowLengthNode ?? vec2(0),
           moonDirectionECEF
-        )
+        ).toConst()
 
         // TODO: Consider moon phase
         inscattering = inscattering.add(
@@ -165,6 +175,6 @@ export class SkyNode extends TempNode {
   }
 }
 
-export const sky = /*#__PURE__*/ nodeProxy(SkyNode, QUAD)
+export const sky = /*#__PURE__*/ nodeProxy(SkyNode, CAMERA)
 export const skyBackground = /*#__PURE__*/ nodeProxy(SkyNode, EQUIRECTANGULAR)
-export const skyBackdrop = /*#__PURE__*/ nodeProxy(SkyNode, SCREEN)
+export const skyBackdrop = /*#__PURE__*/ nodeProxy(SkyNode, BACKDROP)

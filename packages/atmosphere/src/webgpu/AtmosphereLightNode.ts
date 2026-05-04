@@ -1,12 +1,6 @@
 import { Matrix3 } from 'three'
 import type { DirectLightData, LightingContext } from 'three/src/nodes/TSL.js'
-import {
-  cameraViewMatrix,
-  normalWorld,
-  positionWorld,
-  uniform,
-  vec4
-} from 'three/tsl'
+import { normalView, positionView, uniform, vec4 } from 'three/tsl'
 import {
   AnalyticLightNode,
   NodeUpdateType,
@@ -90,12 +84,12 @@ export class AtmosphereLightNode extends AnalyticLightNode<AtmosphereLight> {
       sunRadianceToLuminance,
       luminanceScale
     } = atmosphereContext.parametersNode
-    const { matrixWorldToECEF, matrixECEFToWorld, altitudeCorrectionECEF } =
+    const { matrixViewToECEF, matrixECEFToView, altitudeCorrectionECEF } =
       atmosphereContext
 
     // Derive the ECEF normal vector and the unit-space position of the vertex.
-    const normalECEF = matrixWorldToECEF.mul(vec4(normalWorld, 0)).xyz
-    let positionECEF = matrixWorldToECEF.mul(vec4(positionWorld, 1)).xyz
+    const normalECEF = matrixViewToECEF.mul(vec4(normalView, 0)).xyz
+    let positionECEF = matrixViewToECEF.mul(vec4(positionView, 1)).xyz
     if (atmosphereContext.correctAltitude) {
       positionECEF = positionECEF.add(altitudeCorrectionECEF)
     }
@@ -113,8 +107,7 @@ export class AtmosphereLightNode extends AnalyticLightNode<AtmosphereLight> {
     lightingContext.irradiance.addAssign(indirectIlluminance.mul(intensity))
 
     // Derive the view-space light direction.
-    const directionWorld = matrixECEFToWorld.mul(vec4(directionECEF, 0)).xyz
-    const directionView = cameraViewMatrix.mul(vec4(directionWorld, 0)).xyz
+    const directionView = matrixECEFToView.mul(vec4(directionECEF, 0)).xyz
 
     // Compute the direct luminance of the light.
     // Fortunately, the apparent sizes of the sun and moon are close, we use

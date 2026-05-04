@@ -22,11 +22,33 @@ export class AtmosphereContext extends AtmosphereContextBase {
   matrixMoonFixedToECEF = uniform('mat4').setName('matrixMoonFixedToECEF')
   scatteringSampleCount = uniform(new Vector2(4, 14))
 
+  matrixViewToECEF = uniform('mat4')
+    .setName('matrixViewToECEF')
+    .onRenderUpdate((frame, { value }) => {
+      const camera = this.camera ?? frame.camera
+      if (camera == null) {
+        return
+      }
+      value.multiplyMatrices(this.matrixWorldToECEF.value, camera.matrixWorld)
+    })
+
   matrixECEFToWorld = uniform('mat4')
     .setName('matrixECEFToWorld')
     .onRenderUpdate((_, { value }) => {
-      // The matrixWorldToECEF must be orthogonal.
-      value.copy(this.matrixWorldToECEF.value).transpose()
+      value.copy(this.matrixWorldToECEF.value).invert()
+    })
+
+  matrixECEFToView = uniform('mat4')
+    .setName('matrixECEFToView')
+    .onRenderUpdate((frame, { value }) => {
+      const camera = this.camera ?? frame.camera
+      if (camera == null) {
+        return
+      }
+      value.multiplyMatrices(
+        camera.matrixWorldInverse,
+        value.copy(this.matrixWorldToECEF.value).invert()
+      )
     })
 
   cameraPositionECEF = uniform('vec3')
@@ -73,11 +95,11 @@ export class AtmosphereContext extends AtmosphereContextBase {
 
   cameraPositionUnit = this.cameraPositionECEF
     .mul(this.parametersNode.worldToUnit)
-    .toConst('cameraPositionUnit')
+    .toVar('cameraPositionUnit') // BUG: Cannot use toConst() here
 
   altitudeCorrectionUnit = this.altitudeCorrectionECEF
     .mul(this.parametersNode.worldToUnit)
-    .toConst('altitudeCorrectionUnit')
+    .toVar('altitudeCorrectionUnit') // BUG: Cannot use toConst() here
 
   camera?: Camera
   ellipsoid = Ellipsoid.WGS84
